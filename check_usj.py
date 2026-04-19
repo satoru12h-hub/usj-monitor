@@ -5,8 +5,11 @@ import os
 import re
 
 SEARCH_URL = "https://furima.libecity.com/search?listing_type=normal&sort_key=released_at&keyword=USJ"
+LOGIN_URL = "https://libecity.com/login"
 LINE_CHANNEL_ACCESS_TOKEN = os.environ.get("LINE_CHANNEL_ACCESS_TOKEN")
 LINE_USER_ID = os.environ.get("LINE_USER_ID")
+LIBECITY_EMAIL = os.environ.get("LIBECITY_EMAIL")
+LIBECITY_PASSWORD = os.environ.get("LIBECITY_PASSWORD")
 SEEN_IDS_FILE = "seen_ids.json"
 
 HEADERS = {
@@ -14,9 +17,51 @@ HEADERS = {
 }
 
 
-def get_listings():
-    response = requests.get(SEARCH_URL, headers=HEADERS, timeout=30)
+def create_session():
+    session = requests.Session()
+    session.headers.update(HEADERS)
+
+    # ログインページを取得してCSRFトークンを取得
+    login_page = session.get(LOGIN_URL, timeout=30)
+    soup = BeautifulSoup(login_page.text, "html.parser")
+
+    # CSRFトークンを探す
+    csrf_token = None
+    meta = soup.find("meta", {"name": "csrf-token"})
+    if meta:
+        csrf_token = meta.get("content")
+
+    # input[name="_token"] を探す
+    if not csrf_token:
+        token_input = soup.find("input", {"name": "_token"})
+        if token_input:
+            csrf_token = token_input.get("value")
+
+    print(f"CSRFトークン: {'取得済み' if csrf_token else '未取得'}")
+
+    # ログイン実行
+    login_data = {
+        "email": LIBECITY_EMAIL,
+        "password": LIBECITY_PASSWORD,
+    }
+    if csrf_token:
+        login_data["_token"] = csrf_token
+
+    response = session.post(LOGIN_URL, data=login_data, timeout=30, allow_redirects=True)
+    print(f"ログイン結果: {response.status_code} {response.url}")
+
+    return session
+
+
+def get_listings(session):
+    response = session.get(SEARCH_URL, timeout=30)
     response.raise_for_status()
+
+    # ログインページにリダイレクトされていないか確認
+    if "login" in response.url or "session" in response.url:
+        print(f"警告: ログインページにリダイレクトされました: {response.url}")
+        return []
+
     soup = BeautifulSoup(response.text, "html.parser")
 
     products = {}
@@ -66,7 +111,9 @@ def send_line_message(text):
 
 def main():
     print("USJ出品チェック開始...")
-    listings = get_listings()
+
+    session = create_session()
+    listings = get_listings(session)
     print(f"取得件数: {len(listings)}")
 
     seen_ids = load_seen_ids()
