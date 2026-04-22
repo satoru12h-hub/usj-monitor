@@ -32,42 +32,50 @@ def get_listings():
             all_inputs = page.query_selector_all('input')
             print(f"[debug] input数: {len(all_inputs)}")
             for el in all_inputs:
-                print(f"  input type={el.get_attribute('type')} name={el.get_attribute('name')} id={el.get_attribute('id')} placeholder={el.get_attribute('placeholder')}")
-            all_btns = page.query_selector_all('button[type="submit"]')
-            print(f"[debug] submit button数: {len(all_btns)}")
+                print(f"  input type={el.get_attribute('type')} id={el.get_attribute('id')} placeholder={el.get_attribute('placeholder')}")
+            all_btns = page.query_selector_all('button')
+            print(f"[debug] button数: {len(all_btns)}")
             for el in all_btns:
-                print(f"  button id={el.get_attribute('id')} disabled={el.get_attribute('disabled')} class={el.get_attribute('class')}")
+                print(f"  button id={el.get_attribute('id')} type={el.get_attribute('type')} text={el.inner_text()[:20]!r} disabled={el.get_attribute('disabled')}")
         except Exception as e:
             print(f"[debug] 構造出力失敗: {e}")
 
-        # パスワードフィールドを含むフォーム = ログインフォーム を特定
-        login_form = page.locator('form:has(input[type="password"])')
-        if login_form.count() > 0:
-            print("ログインフォームを発見（パスワードフィールドで特定）")
-            # ログインフォーム内のメール/テキスト入力を探す
-            email_filled = False
-            for sel in ['input[type="email"]', 'input[type="text"]', 'input:not([type="password"])']:
-                try:
-                    field = login_form.locator(sel).first
-                    if field.count() > 0:
-                        field.fill(LIBECITY_EMAIL)
-                        print(f"メール入力成功（ログインフォーム内）: {sel}")
-                        email_filled = True
-                        break
-                except Exception:
-                    continue
-            if not email_filled:
-                print("警告: ログインフォーム内にメールフィールドが見つかりません")
+        # メールアドレスを入力（placeholder="メールアドレス"のtextフィールド）
+        page.fill('input[placeholder="メールアドレス"]', LIBECITY_EMAIL)
+        print("メール入力成功")
 
-            login_form.locator('input[type="password"]').fill(LIBECITY_PASSWORD)
-            print("パスワード入力成功")
-            login_form.locator('button[type="submit"]').click(timeout=30000)
-        else:
-            print("警告: ログインフォームが見つかりません。フォールバック処理を試みます")
-            print(page.content()[:3000])
-            # フォールバック
-            page.fill('input[type="password"]', LIBECITY_PASSWORD)
-            page.click('button[type="submit"]')
+        # パスワードを入力
+        page.fill('input[type="password"]', LIBECITY_PASSWORD)
+        print("パスワード入力成功")
+
+        # ログインボタンをクリック（"ログイン"テキストを持つボタンを探す）
+        login_btn_selectors = [
+            'button:has-text("ログイン")',
+            'button:has-text("サインイン")',
+            'button:has-text("signin")',
+            'button:has-text("login")',
+            'button[id*="login"i]',
+            'button[class*="login"i]',
+        ]
+        btn_clicked = False
+        for sel in login_btn_selectors:
+            try:
+                btn = page.locator(sel)
+                if btn.count() > 0:
+                    btn.first.click(timeout=10000)
+                    print(f"ログインボタンクリック成功: {sel}")
+                    btn_clicked = True
+                    break
+            except Exception as e:
+                print(f"  ボタン試行 {sel}: {e}")
+                continue
+
+        if not btn_clicked:
+            print("警告: ログインボタンが見つかりません")
+            # 全ボタンの詳細を出力
+            all_btns2 = page.query_selector_all('button')
+            for btn in all_btns2:
+                print(f"  [all] button id={btn.get_attribute('id')} text={btn.inner_text()!r}")
 
         page.wait_for_timeout(5000)
         print(f"ログイン後URL: {page.url}")
