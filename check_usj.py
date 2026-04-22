@@ -22,22 +22,44 @@ def get_listings():
 
         # ログイン
         print("ログインページへアクセス...")
-        page.goto(LOGIN_URL, wait_until="load", timeout=60000)
-        page.wait_for_selector('input[type="email"]', timeout=30000)
+        page.goto(LOGIN_URL, wait_until="domcontentloaded", timeout=60000)
+        # JSレンダリング待ち
+        page.wait_for_timeout(5000)
+        print(f"ログインページURL: {page.url}")
 
-        page.fill('input[type="email"]', LIBECITY_EMAIL)
+        # メール入力フィールドを探す（複数セレクターを試す）
+        email_selectors = [
+            'input[type="email"]',
+            'input[name="email"]',
+            'input[placeholder*="メール"]',
+            'input[placeholder*="mail"]',
+            'input[id*="email"]',
+        ]
+        filled = False
+        for sel in email_selectors:
+            try:
+                if page.locator(sel).count() > 0:
+                    page.fill(sel, LIBECITY_EMAIL)
+                    print(f"メール入力成功: {sel}")
+                    filled = True
+                    break
+            except Exception:
+                continue
+
+        if not filled:
+            print("警告: メール入力フィールドが見つかりません")
+            # ページのHTMLを一部出力してデバッグ
+            print(page.content()[:2000])
+
         page.fill('input[type="password"]', LIBECITY_PASSWORD)
         page.click('button[type="submit"]')
-        page.wait_for_load_state("load", timeout=60000)
-        # ログイン完了まで少し待つ
-        page.wait_for_timeout(3000)
+        page.wait_for_timeout(5000)
         print(f"ログイン後URL: {page.url}")
 
         # 検索ページへアクセス
         print("検索ページへアクセス...")
-        page.goto(SEARCH_URL, wait_until="load", timeout=60000)
-        # コンテンツ読み込み待ち
-        page.wait_for_timeout(3000)
+        page.goto(SEARCH_URL, wait_until="domcontentloaded", timeout=60000)
+        page.wait_for_timeout(5000)
         print(f"検索URL: {page.url}")
 
         content = page.content()
