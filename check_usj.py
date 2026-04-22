@@ -22,17 +22,22 @@ def get_listings():
 
         # ログイン
         print("ログインページへアクセス...")
-        page.goto(LOGIN_URL, wait_until="networkidle", timeout=60000)
+        page.goto(LOGIN_URL, wait_until="load", timeout=60000)
+        page.wait_for_selector('input[type="email"]', timeout=30000)
 
         page.fill('input[type="email"]', LIBECITY_EMAIL)
         page.fill('input[type="password"]', LIBECITY_PASSWORD)
         page.click('button[type="submit"]')
-        page.wait_for_load_state("networkidle", timeout=60000)
+        page.wait_for_load_state("load", timeout=60000)
+        # ログイン完了まで少し待つ
+        page.wait_for_timeout(3000)
         print(f"ログイン後URL: {page.url}")
 
         # 検索ページへアクセス
         print("検索ページへアクセス...")
-        page.goto(SEARCH_URL, wait_until="networkidle", timeout=60000)
+        page.goto(SEARCH_URL, wait_until="load", timeout=60000)
+        # コンテンツ読み込み待ち
+        page.wait_for_timeout(3000)
         print(f"検索URL: {page.url}")
 
         content = page.content()
