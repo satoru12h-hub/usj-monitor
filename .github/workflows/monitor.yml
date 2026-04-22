@@ -23,7 +23,10 @@ jobs:
           python-version: '3.11'
 
       - name: ライブラリインストール
-        run: pip install requests beautifulsoup4
+        run: |
+          pip install playwright
+          playwright install chromium
+          playwright install-deps chromium
 
       - name: USJチェック実行
         env:

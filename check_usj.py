@@ -1,8 +1,7 @@
-import requests
-from bs4 import BeautifulSoup
 import json
 import os
 import re
+from playwright.sync_api import sync_playwright
 
 SEARCH_URL = "https://furima.libecity.com/search?listing_type=normal&sort_key=released_at&keyword=USJ"
 LOGIN_URL = "https://libecity.com/login"
@@ -12,71 +11,43 @@ LIBECITY_EMAIL = os.environ.get("LIBECITY_EMAIL")
 LIBECITY_PASSWORD = os.environ.get("LIBECITY_PASSWORD")
 SEEN_IDS_FILE = "seen_ids.json"
 
-HEADERS = {
-    "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
-}
 
+def get_listings():
+    with sync_playwright() as p:
+        browser = p.chromium.launch(headless=True)
+        context = browser.new_context(
+            user_agent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+        )
+        page = context.new_page()
 
-def create_session():
-    session = requests.Session()
-    session.headers.update(HEADERS)
+        # ログイン
+        print("ログインページへアクセス...")
+        page.goto(LOGIN_URL, wait_until="networkidle", timeout=60000)
 
-    # ログインページを取得してCSRFトークンを取得
-    login_page = session.get(LOGIN_URL, timeout=30)
-    soup = BeautifulSoup(login_page.text, "html.parser")
+        page.fill('input[type="email"]', LIBECITY_EMAIL)
+        page.fill('input[type="password"]', LIBECITY_PASSWORD)
+        page.click('button[type="submit"]')
+        page.wait_for_load_state("networkidle", timeout=60000)
+        print(f"ログイン後URL: {page.url}")
 
-    # CSRFトークンを探す
-    csrf_token = None
-    meta = soup.find("meta", {"name": "csrf-token"})
-    if meta:
-        csrf_token = meta.get("content")
+        # 検索ページへアクセス
+        print("検索ページへアクセス...")
+        page.goto(SEARCH_URL, wait_until="networkidle", timeout=60000)
+        print(f"検索URL: {page.url}")
 
-    # input[name="_token"] を探す
-    if not csrf_token:
-        token_input = soup.find("input", {"name": "_token"})
-        if token_input:
-            csrf_token = token_input.get("value")
+        content = page.content()
+        browser.close()
 
-    print(f"CSRFトークン: {'取得済み' if csrf_token else '未取得'}")
-
-    # ログイン実行
-    login_data = {
-        "email": LIBECITY_EMAIL,
-        "password": LIBECITY_PASSWORD,
-    }
-    if csrf_token:
-        login_data["_token"] = csrf_token
-
-    response = session.post(LOGIN_URL, data=login_data, timeout=30, allow_redirects=True)
-    print(f"ログイン結果: {response.status_code} {response.url}")
-
-    return session
-
-
-def get_listings(session):
-    response = session.get(SEARCH_URL, timeout=30)
-    response.raise_for_status()
-
-    # ログインページにリダイレクトされていないか確認
-    if "login" in response.url or "session" in response.url:
-        print(f"警告: ログインページにリダイレクトされました: {response.url}")
-        return []
-
-    soup = BeautifulSoup(response.text, "html.parser")
-
+    # 商品IDを抽出
     products = {}
-    for link in soup.find_all("a", href=True):
-        href = link["href"]
-        match = re.search(r"/products/(\d+)", href)
-        if not match:
-            continue
+    for match in re.finditer(r'/products/(\d+)', content):
         product_id = match.group(1)
-        if product_id in products:
-            continue
-
-        full_url = f"https://furima.libecity.com/products/{product_id}"
-        title = link.get_text(strip=True) or f"商品 #{product_id}"
-        products[product_id] = {"id": product_id, "url": full_url, "title": title}
+        if product_id not in products:
+            products[product_id] = {
+                "id": product_id,
+                "url": f"https://furima.libecity.com/products/{product_id}",
+                "title": f"商品 #{product_id}"
+            }
 
     return list(products.values())
 
@@ -94,26 +65,28 @@ def save_seen_ids(ids):
 
 
 def send_line_message(text):
+    import urllib.request
     url = "https://api.line.me/v2/bot/message/push"
     headers = {
         "Content-Type": "application/json",
         "Authorization": f"Bearer {LINE_CHANNEL_ACCESS_TOKEN}",
     }
-    data = {
+    data = json.dumps({
         "to": LINE_USER_ID,
         "messages": [{"type": "text", "text": text}],
-    }
-    response = requests.post(url, headers=headers, json=data, timeout=10)
-    if response.status_code != 200:
-        print(f"LINE通知失敗: {response.status_code} {response.text}")
-    return response.status_code == 200
+    }).encode("utf-8")
+    req = urllib.request.Request(url, data=data, headers=headers, method="POST")
+    try:
+        with urllib.request.urlopen(req, timeout=10) as res:
+            return res.status == 200
+    except Exception as e:
+        print(f"LINE通知失敗: {e}")
+        return False
 
 
 def main():
     print("USJ出品チェック開始...")
-
-    session = create_session()
-    listings = get_listings(session)
+    listings = get_listings()
     print(f"取得件数: {len(listings)}")
 
     seen_ids = load_seen_ids()
@@ -122,10 +95,10 @@ def main():
     if new_listings:
         print(f"新着: {len(new_listings)}件")
         for listing in new_listings:
-            title = listing["title"][:40] if listing["title"] else f"商品 #{listing['id']}"
+            title = listing["title"][:40]
             message = f"🎡 USJ新着出品！\n{title}\n{listing['url']}"
-            send_line_message(message)
-            print(f"通知送信: {listing['id']} - {title}")
+            success = send_line_message(message)
+            print(f"通知{'成功' if success else '失敗'}: {listing['id']} - {title}")
     else:
         print("新着なし")
 
