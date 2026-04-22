@@ -2,7 +2,7 @@ name: USJ出品監視
 
 on:
   schedule:
-    - cron: '*/15 * * * *'  # 15分ごとに実行
+    - cron: '*/5 * * * *'   # 5分ごとに実行（GitHubの最短間隔）
   workflow_dispatch:         # 手動実行ボタン
 
 jobs:
@@ -22,11 +22,27 @@ jobs:
         with:
           python-version: '3.11'
 
+      - name: pipキャッシュ
+        uses: actions/cache@v4
+        id: pip-cache
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-playwright
+
+      - name: Playwrightキャッシュ
+        uses: actions/cache@v4
+        id: playwright-cache
+        with:
+          path: ~/.cache/ms-playwright
+          key: ${{ runner.os }}-playwright-chromium
+
       - name: ライブラリインストール
         run: |
           pip install playwright
-          playwright install chromium
-          playwright install-deps chromium
+          if [ "${{ steps.playwright-cache.outputs.cache-hit }}" != "true" ]; then
+            playwright install chromium
+            playwright install-deps chromium
+          fi
 
       - name: USJチェック実行
         env:
