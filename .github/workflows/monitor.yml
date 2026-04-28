@@ -5,10 +5,6 @@ on:
     - cron: '*/5 * * * *'   # 5分ごとに実行（GitHubの最短間隔）
   workflow_dispatch:         # 手動実行ボタン
 
-concurrency:
-  group: usj-monitor
-  cancel-in-progress: false
-
 jobs:
   check:
     runs-on: ubuntu-latest
