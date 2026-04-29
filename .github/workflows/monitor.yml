@@ -29,20 +29,25 @@ jobs:
           path: ~/.cache/pip
           key: ${{ runner.os }}-pip-playwright
 
+      - name: Playwrightインストール
+        run: pip install playwright
+
+      - name: Playwrightバージョン取得
+        id: playwright-version
+        run: echo "version=$(pip show playwright | grep ^Version | awk '{print $2}')" >> $GITHUB_OUTPUT
+
       - name: Playwrightキャッシュ
         uses: actions/cache@v4
         id: playwright-cache
         with:
           path: ~/.cache/ms-playwright
-          key: ${{ runner.os }}-playwright-chromium
+          key: ${{ runner.os }}-playwright-${{ steps.playwright-version.outputs.version }}
 
-      - name: ライブラリインストール
+      - name: Chromiumインストール
+        if: steps.playwright-cache.outputs.cache-hit != 'true'
         run: |
-          pip install playwright
-          if [ "${{ steps.playwright-cache.outputs.cache-hit }}" != "true" ]; then
-            playwright install chromium
-            playwright install-deps chromium
-          fi
+          playwright install chromium
+          playwright install-deps chromium
 
       - name: USJチェック実行
         env:
