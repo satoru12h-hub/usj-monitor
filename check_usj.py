@@ -80,10 +80,18 @@ def get_listings():
         page.wait_for_timeout(5000)
         print(f"ログイン後URL: {page.url}")
 
+        # furima.libecity.comのホームへまず訪問（Cookie設定・接続確立のため）
+        print("furi.libecity.comホームへアクセス...")
+        try:
+            page.goto("https://furima.libecity.com/", wait_until="commit", timeout=30000)
+            page.wait_for_timeout(2000)
+        except Exception as e:
+            print(f"ホームアクセス失敗（続行）: {e}")
+
         # 検索ページへアクセス
         print("検索ページへアクセス...")
-        page.goto(SEARCH_URL, wait_until="domcontentloaded", timeout=60000)
-        page.wait_for_timeout(5000)
+        page.goto(SEARCH_URL, wait_until="commit", timeout=90000)
+        page.wait_for_timeout(6000)
         print(f"検索URL: {page.url}")
 
         content = page.content()
@@ -159,4 +167,9 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except Exception as e:
+        print(f"エラーが発生しました（監視を継続します）: {e}")
+        import sys
+        sys.exit(0)  # 失敗メール送信を防ぐため正常終了
