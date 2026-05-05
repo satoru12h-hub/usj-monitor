@@ -1,7 +1,7 @@
 name: USJ出品監視
 
 on:
-  workflow_dispatch:         # cron-job.orgから10分ごとに呼び出し（手動実行も可）
+  workflow_dispatch:         # cron-job.orgから2分ごとに呼び出し（手動実行も可）
 
 jobs:
   check:
@@ -15,45 +15,11 @@ jobs:
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Python セットアップ
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.11'
-
-      - name: pipキャッシュ
-        uses: actions/cache@v4
-        id: pip-cache
-        with:
-          path: ~/.cache/pip
-          key: ${{ runner.os }}-pip-playwright
-
-      - name: Playwrightインストール
-        run: pip install playwright
-
-      - name: Playwrightバージョン取得
-        id: playwright-version
-        run: echo "version=$(pip show playwright | grep ^Version | awk '{print $2}')" >> $GITHUB_OUTPUT
-
-      - name: Playwrightキャッシュ
-        uses: actions/cache@v4
-        id: playwright-cache
-        with:
-          path: ~/.cache/ms-playwright
-          key: ${{ runner.os }}-playwright-${{ steps.playwright-version.outputs.version }}
-
-      - name: Chromiumインストール
-        if: steps.playwright-cache.outputs.cache-hit != 'true'
-        run: |
-          playwright install chromium
-          playwright install-deps chromium
-
-      - name: USJチェック実行
+      - name: USJチェック実行（軽量版・Playwright不要）
         env:
           LINE_CHANNEL_ACCESS_TOKEN: ${{ secrets.LINE_CHANNEL_ACCESS_TOKEN }}
           LINE_USER_ID: ${{ secrets.LINE_USER_ID }}
-          LIBECITY_EMAIL: ${{ secrets.LIBECITY_EMAIL }}
-          LIBECITY_PASSWORD: ${{ secrets.LIBECITY_PASSWORD }}
-        run: python check_usj.py
+        run: python check_usj_simple.py
 
       - name: 既読IDを保存（コミット）
         run: |
